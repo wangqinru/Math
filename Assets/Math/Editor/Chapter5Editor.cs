@@ -1,0 +1,249 @@
+using UnityEditor;
+using UnityEngine;
+
+[CustomEditor( typeof(Chapter5) )]
+public class Chapter5Editor : Editor
+{
+    Matrix4x4 modelTramsform = new Matrix4x4();
+
+	private MeshFilter meshFilter;
+	/// <summary>
+	/// 元の頂点
+	/// </summary>
+	private Vector3[] origVerts;
+	/// <summary>
+	/// モデル変換後の頂点
+	/// </summary>
+	private Vector3[] newVerts;
+
+    float determinant3x3;
+	float determinant4x4;
+
+    Vector3 translation;
+    Vector3 rotation;
+
+	Vector3 scale = Vector3.one;
+	Matrix4x4 projectionTramsform = new Matrix4x4();
+	Vector4 result;
+
+    public override void OnInspectorGUI() 
+    {
+        // base.OnInspectorGUI ();
+
+        // Hide Script property
+		serializedObject.Update();
+		DrawPropertiesExcluding(serializedObject, new string[]{"m_Script"});
+		serializedObject.ApplyModifiedProperties();
+
+        Chapter5 c5 = target as Chapter5;
+
+        EditorGUI.BeginChangeCheck();
+
+		// Model Transform
+		EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		EditorGUILayout.LabelField(new GUIContent("Model Transform"));
+
+		modelTramsform.SetRow(0, RowVector4Field(modelTramsform.GetRow(0)));
+		modelTramsform.SetRow(1, RowVector4Field(modelTramsform.GetRow(1)));
+		modelTramsform.SetRow(2, RowVector4Field(modelTramsform.GetRow(2)));
+		modelTramsform.SetRow(3, RowVector4Field(modelTramsform.GetRow(3)));
+		
+		if ( GUILayout.Button("Reset") ) {
+			modelTramsform.SetRow(0, new Vector4(1, 0, 0, 0));
+			modelTramsform.SetRow(1, new Vector4(0, 1, 0, 0));
+			modelTramsform.SetRow(2, new Vector4(0, 0, 1, 0));
+			modelTramsform.SetRow(3, new Vector4(0, 0, 0, 1));
+		}
+
+		if ( GUILayout.Button("Apply") ) {
+			meshFilter = c5.Cube.GetComponent<MeshFilter>();
+			origVerts = meshFilter.mesh.vertices;
+			newVerts = new Vector3[origVerts.Length];
+
+			for (int i = 0; i < origVerts.Length; i++)
+			{
+				newVerts[i] = modelTramsform.MultiplyPoint3x4(origVerts[i]);
+			}
+
+			meshFilter.mesh.vertices = newVerts;
+		}
+
+		EditorGUILayout.EndVertical();
+
+        EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		determinant3x3 = EditorGUILayout.FloatField("Determinant (3x3)", determinant3x3);
+		determinant4x4 = EditorGUILayout.FloatField("Determinant (4x4)", determinant4x4);
+
+		EditorGUILayout.EndVertical();
+
+		// Translation
+		EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		translation = EditorGUILayout.Vector3Field(new GUIContent("Translation"), translation);
+
+		if ( GUILayout.Button("Apply") ) {
+			Matrix4x4 m = Matrix4x4.identity;
+			m.SetTRS(translation, Quaternion.identity, Vector3.one);
+			modelTramsform = m * modelTramsform;
+		}
+
+		EditorGUILayout.EndVertical();
+
+		// Rotation
+		EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		rotation = EditorGUILayout.Vector3Field(new GUIContent("Rotation"), rotation);
+
+		if ( GUILayout.Button("Apply") ) 
+		{
+			Matrix4x4 m = Matrix4x4.identity;
+			m.SetTRS(Vector3.zero, Quaternion.Euler(rotation.x, rotation.y, rotation.z), Vector3.one);
+			modelTramsform = m * modelTramsform;
+		}
+
+		EditorGUILayout.EndVertical();
+
+		// Scale
+		EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		scale = EditorGUILayout.Vector3Field(new GUIContent("Scale"), scale);
+
+		if ( GUILayout.Button("Apply") ) 
+		{
+			Matrix4x4 m = Matrix4x4.identity;
+			m.SetTRS(Vector3.zero, Quaternion.identity, scale);
+			modelTramsform = m * modelTramsform;
+		}
+
+		EditorGUILayout.EndVertical();
+
+		// Projection Transform
+		EditorGUILayout.BeginVertical( GUI.skin.box );
+
+		EditorGUILayout.LabelField(new GUIContent("Projection Transform"));
+
+		if ( GUILayout.Button("Perspective") ) {
+			Camera.main.orthographic = false;
+		}
+
+		if ( GUILayout.Button("Orthographic") ) {
+			Camera.main.orthographic = true;
+		}
+
+		projectionTramsform.SetRow(0, RowVector4Field(projectionTramsform.GetRow(0)));
+		projectionTramsform.SetRow(1, RowVector4Field(projectionTramsform.GetRow(1)));
+		projectionTramsform.SetRow(2, RowVector4Field(projectionTramsform.GetRow(2)));
+		projectionTramsform.SetRow(3, RowVector4Field(projectionTramsform.GetRow(3)));
+
+		if ( GUILayout.Button("Camera.main.projectionMatrix") ) 
+		{
+			string graphicsDeviceType = SystemInfo.graphicsDeviceType.ToString();
+			Debug.Log(graphicsDeviceType);
+
+			bool dx = graphicsDeviceType.IndexOf("Direct3D") == 0;
+
+			int dxVersion = 11;
+			if (dx) {
+				System.Int32.TryParse(graphicsDeviceType.Substring("Direct3D".Length), out dxVersion);
+				Debug.Log("Direct3D version: " + dxVersion);
+			}
+
+			Matrix4x4 pm = Camera.main.projectionMatrix;
+
+			if (dx) {
+				if (dxVersion < 11) {
+					for (int i = 0; i < 4; i++) {
+						pm [1, i] = -pm [1, i];
+					}
+
+					for (int i = 0; i < 4; i++) {
+						pm [2, i] = pm [2, i] * 0.5f + pm [3, i] * 0.5f;
+					}
+				} else {
+					for (int i = 0; i < 4; i++) {
+						pm[1, i] = -pm[1, i];
+					}
+
+					for (int i = 0; i < 4; i++) {
+						pm[2, i] = pm[2, i] * -0.5f + pm[3, i] * 0.5f;
+					}
+				}
+			}
+
+			projectionTramsform = pm;
+
+			Matrix4x4 gpuProjectionMatrix = GL.GetGPUProjectionMatrix(Camera.main.projectionMatrix, true);
+			if (pm == gpuProjectionMatrix) {
+				Debug.Log("Camera.main.projectionMatrix matches with GL.GetGPUProjectionMatrix");
+			} else {
+				Debug.LogWarning("Camera.main.projectionMatrix doesn't match with GL.GetGPUProjectionMatrix");
+			}
+		}
+
+		if ( GUILayout.Button("GL.GetGPUProjectionMatrix") ) 
+		{
+			projectionTramsform = GL.GetGPUProjectionMatrix(Camera.main.projectionMatrix, true);
+		}
+
+		if ( GUILayout.Button("Reset") ) 
+		{
+			projectionTramsform = Matrix4x4.identity;
+			Camera.main.ResetProjectionMatrix();
+		}
+
+		if ( GUILayout.Button("Set") ) 
+		{
+			Camera.main.projectionMatrix = projectionTramsform;
+		}
+
+		EditorGUILayout.EndVertical();
+
+		if (EditorGUI.EndChangeCheck()) {
+			determinant3x3 = getDeterminant3x3(modelTramsform);
+			determinant4x4 = getDeterminant4x4(modelTramsform);
+
+			Undo.RecordObject(target, "Chapter5EditorUndo");
+			EditorUtility.SetDirty(target);
+		}
+    }
+
+    public float getDeterminant3x3(Matrix4x4 m) {
+		return m.m00 * m.m11 * m.m22 - m.m00 * m.m12 * m.m21 - m.m01 * m.m10 * m.m22
+			+ m.m01 * m.m12 * m.m20 + m.m02 * m.m10 * m.m21 - m.m02 * m.m11 * m.m20
+		;
+	}
+
+	public float getDeterminant4x4(Matrix4x4 m) {
+		return m.m03 * m.m12 * m.m21 * m.m30 - m.m02 * m.m13 * m.m21 * m.m30 - m.m03 * m.m11 * m.m22 * m.m30
+			+ m.m01 * m.m13 * m.m22 * m.m30 + m.m02 * m.m11 * m.m23 * m.m30 - m.m01 * m.m12 * m.m23 * m.m30
+			- m.m03 * m.m12 * m.m20 * m.m31 + m.m02 * m.m13 * m.m20 * m.m31 + m.m03 * m.m10 * m.m22 * m.m31
+			- m.m00 * m.m13 * m.m22 * m.m31 - m.m02 * m.m10 * m.m23 * m.m31 + m.m00 * m.m12 * m.m23 * m.m31
+			+ m.m03 * m.m11 * m.m20 * m.m32 - m.m01 * m.m13 * m.m20 * m.m32 - m.m03 * m.m10 * m.m21 * m.m32
+			+ m.m00 * m.m13 * m.m21 * m.m32 + m.m01 * m.m10 * m.m23 * m.m32 - m.m00 * m.m11 * m.m23 * m.m32
+			- m.m02 * m.m11 * m.m20 * m.m33 + m.m01 * m.m12 * m.m20 * m.m33 + m.m02 * m.m10 * m.m21 * m.m33
+			- m.m00 * m.m12 * m.m21 * m.m33 - m.m01 * m.m10 * m.m22 * m.m33 + m.m00 * m.m11 * m.m22 * m.m33
+		;
+	}
+
+    public static Vector4 RowVector4Field(Vector4 value, params GUILayoutOption[] options)
+	{
+		Rect position = EditorGUILayout.GetControlRect(true, 16f, EditorStyles.numberField, options);
+		float[] values = new float[]{value.x, value.y, value.z, value.w};
+
+		EditorGUI.BeginChangeCheck();
+
+		EditorGUI.MultiFloatField(
+			position,
+			new GUIContent[]{new GUIContent(), new GUIContent(), new GUIContent(), new GUIContent()},
+			values
+		);
+
+		if (EditorGUI.EndChangeCheck()) {
+			value.Set(values[0], values[1], values[2], values[3]);
+		}
+
+		return value;
+	}
+}

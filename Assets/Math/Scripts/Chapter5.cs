@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Chapter4 : MonoBehaviour
+public class Chapter5 : MonoBehaviour
 {
+	public GameObject Cube;
 }
